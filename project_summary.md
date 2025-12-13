@@ -3,94 +3,34 @@
 ## 项目结构
 ```text
 VID-Trans-ReID-main/
-└── Data/
-    ├── MARS/                              # MARS 视频行人重识别数据集
-    │   ├── bbox_train/                    # 训练集图像（625个行人）
-    │   │   ├── 0000/
-    │   │   │   ├── 0000C1T0001F001.jpg    # 命名规则：{ID}C{cam}T{track}F{frame}.jpg
-    │   │   │   ├── 0000C1T0001F002.jpg    # - C{cam}: 摄像头编号（1~6）
-    │   │   │   └── ...                    # - T{track}: 轨迹编号
-    │   │   ├── 0002/                      # - F{frame}: 帧序号
-    │   │   └── ...                        # 行人ID不连续（如 0000, 0002, ..., 1500）
-    │   │
-    │   ├── bbox_test/                     # 测试集图像（636个行人，与训练集身份无重叠）
-    │   │   ├── 0000/
-    │   │   └── ...
-    │   │
-    │   └── info/                          # 官方元信息文件
-    │       ├── tracks_train_info.mat      # 训练轨迹元数据（ID、摄像头、帧范围等）
-    │       ├── tracks_test_info.mat       # 测试轨迹元数据
-    │       ├── query_IDX.mat              # ReID 查询/图库划分（用于评估）
-    │       ├── train_name.txt             # 训练行人ID列表（文本）
-    │       └── test_name.txt              # 测试行人ID列表（文本）
-    │
-    └── i-LIDS-VID/                        # i-LIDS-VID 视频行人重识别数据集
-        └── i-LIDS-VID/
-            ├── images/                    # 预处理后的行人图像（用于常规 ReID）
-            │   ├── cam1/                  # 摄像头1视角
-            │   │   ├── person001/
-            │   │   │   ├── cam1_person001.png                 # 单帧代表图（部分行人）
-            │   │   │   ├── cam1_person001_00317.png           # 多帧序列（带原始帧编号）
-            │   │   │   └── ...
-            │   │   └── ...
-            │   │   └── person319/
-            │   └── cam2/                  # 摄像头2视角（结构同 cam1）
-            │       ├── person001/
-            │       └── ...
-            │
-            ├── sequences/                 # 完整视频序列（用于时序建模，如 Transformer）
-            │   ├── cam1/
-            │   │   ├── person001/
-            │   │   │   ├── cam1_person001_00317.png
-            │   │   │   ├── cam1_person001_00318.png
-            │   │   │   └── ...
-            │   │   └── ...
-            │   └── cam2/
-            │       ├── person001/
-            │       └── ...
-            │
-            └── train-test people splits/  # 标准训练/测试人员划分
-                ├── readme.txt
-                ├── train_test_splits_ilidsvid.mat
-                ├── train_test_splits_prid.mat
-                └── splits.json
 ├── Datasets/
 │   ├── MARS_dataset.py
 │   ├── PRID_dataset.py
 │   └── iLDSVID.py
-├── checkpoints_baseline/
-│   ├── tb/
-│   │   ├── events.out.tfevents.1755587657.LAPTOP-JQEOT4LR.8216.0
-│   │   ├── events.out.tfevents.1755588814.LAPTOP-JQEOT4LR.9052.0
-│   │   └── events.out.tfevents.1755589753.LAPTOP-JQEOT4LR.23788.0
-│   ├── ... (4 more .pth files)
-│   ├── baseline_best_auc_0.4468.pth
-│   ├── baseline_best_auc_0.4726.pth
-│   └── baseline_best_auc_0.5413.pth
-├── checkpoints_hierarchical/
-│   ├── ... (6 more .pth files)
-│   ├── hierarchical_best_auc_0.4132.pth
-│   ├── hierarchical_best_auc_0.5936.pth
-│   └── hierarchical_best_auc_0.6525.pth
+├── checkpoints_ablation/
 ├── checkpoints_hierarchical_mars/
-│   ├── focal/
-│   ├── hierarchical_best_auc_0.9423.pth
-│   └── hierarchical_best_auc_0.9726.pth
+│   ├── bce/
+│   │   └── hierarchical_best_auc_0.9650.pth
+│   └── bce_symkl/
+│       └── hierarchical_best_auc_0.9769.pth
 ├── loss/
 │   ├── center_loss.py
 │   ├── softmax_loss.py
 │   └── triplet_loss.py
 ├── losses/
+├── paper_figures/
 ├── ... (1 more .pth files)
-├── BCR-Focal损失函数详解.md
+├── .gitignore
 ├── CrossAttention_model.py
 ├── Dataloader.py
 ├── HierarchicalCrossAttention_model.py
 ├── Loss_fun.py
-├── Mars_Main_Model.pth
+├── Mars_best_epoch59_rank1_0.9565_mAP_0.8859.pth
 ├── VID_Test.py
 ├── VID_Trans_ReID.py
 ├── VID_Trans_model.py
+├── check_pretrained_model.py
+├── figure3_rerank_highres.pdf
 ├── iLIDSVID_best.pth
 ├── iLIDSVID_best_mAP.pth
 ├── pair_losses.py
@@ -860,7 +800,7 @@ class Mars(object):
         min_seq_len (int): tracklet with length shorter than this value will be discarded (default: 0).
     """
    
-    root  = osp.join('Data', 'MARS') # default dataset root inside project: Data/MARS
+    root  ='Data/MARS' #'/home2/zwjx97/STE-NVAN-master/MARS' #"/home/aishahalsehaim/Desktop/STE-NVAN-master/MARS" 
    
     train_name_path = osp.join(root, 'info/train_name.txt')
     test_name_path = osp.join(root, 'info/test_name.txt')
@@ -882,24 +822,14 @@ class Mars(object):
         gallery_IDX = [i for i in range(track_test.shape[0]) if i not in query_IDX]
         track_gallery = track_test[gallery_IDX,:]
 
-        # Detect correct home dirs (handle accidental nested folders like bbox_train/bbox_train)
-        self.train_home = 'bbox_train'
-        self.test_home = 'bbox_test'
-        nested_train = osp.join(self.root, 'bbox_train', 'bbox_train')
-        nested_test = osp.join(self.root, 'bbox_test', 'bbox_test')
-        if osp.exists(nested_train):
-            self.train_home = osp.join('bbox_train', 'bbox_train')
-        if osp.exists(nested_test):
-            self.test_home = osp.join('bbox_test', 'bbox_test')
+        train, num_train_tracklets, num_train_pids, num_train_imgs =           self._process_data(train_names, track_train, home_dir='bbox_train', relabel=True, min_seq_len=min_seq_len)
 
-        train, num_train_tracklets, num_train_pids, num_train_imgs =           self._process_data(train_names, track_train, home_dir=self.train_home, relabel=True, min_seq_len=min_seq_len)
+        video = self._process_train_data(train_names, track_train, home_dir='bbox_train', relabel=True, min_seq_len=min_seq_len)
+        
 
-        video = self._process_train_data(train_names, track_train, home_dir=self.train_home, relabel=True, min_seq_len=min_seq_len)
+        query, num_query_tracklets, num_query_pids, num_query_imgs =           self._process_data(test_names, track_query, home_dir='bbox_test', relabel=False, min_seq_len=min_seq_len)
 
-
-        query, num_query_tracklets, num_query_pids, num_query_imgs =           self._process_data(test_names, track_query, home_dir=self.test_home, relabel=False, min_seq_len=min_seq_len)
-
-        gallery, num_gallery_tracklets, num_gallery_pids, num_gallery_imgs =           self._process_data(test_names, track_gallery, home_dir=self.test_home, relabel=False, min_seq_len=min_seq_len)
+        gallery, num_gallery_tracklets, num_gallery_pids, num_gallery_imgs =           self._process_data(test_names, track_gallery, home_dir='bbox_test', relabel=False, min_seq_len=min_seq_len)
 
         num_imgs_per_tracklet = num_train_imgs + num_query_imgs + num_gallery_imgs
         min_num = np.min(num_imgs_per_tracklet)
@@ -960,7 +890,7 @@ class Mars(object):
         return names
 
     def _process_data(self, names, meta_data, home_dir=None, relabel=False, min_seq_len=0):
-        assert home_dir is not None and ('bbox_train' in home_dir or 'bbox_test' in home_dir)
+        assert home_dir in ['bbox_train', 'bbox_test']
         num_tracklets = meta_data.shape[0]
         pid_list = list(set(meta_data[:,2].tolist()))
         num_pids = len(pid_list)
@@ -988,7 +918,8 @@ class Mars(object):
             assert len(set(camnames)) == 1, "Error: images are captured under different cameras!"
 
             # append image names with directory information
-            img_paths = [osp.join(self.root, home_dir, img_name[:4], img_name) for img_name in img_names]
+            
+            img_paths = [osp.join(self.root, home_dir, home_dir, img_name[:4], img_name) for img_name in img_names]
             if len(img_paths) >= min_seq_len:
                 img_paths = tuple(img_paths)
                 tracklets.append((img_paths, pid, camid))
@@ -1005,7 +936,7 @@ class Mars(object):
     def _process_train_data(self, names, meta_data, home_dir=None, relabel=False, min_seq_len=0):
         video = defaultdict(dict)
 
-        assert home_dir is not None and ('bbox_train' in home_dir or 'bbox_test' in home_dir)
+        assert home_dir in ['bbox_train', 'bbox_test']
         num_tracklets = meta_data.shape[0]
         pid_list = list(set(meta_data[:,2].tolist()))
         num_pids = len(pid_list)
@@ -1026,7 +957,8 @@ class Mars(object):
             assert len(set(camnames)) == 1, "Error: images are captured under different cameras!"
 
             # append image names with directory information
-            img_paths = [osp.join(self.root, home_dir, img_name[:4], img_name) for img_name in img_names]
+            # 修复：数据集解压时多了一层目录，需要添加额外的home_dir层
+            img_paths = [osp.join(self.root, home_dir, home_dir, img_name[:4], img_name) for img_name in img_names]
             if len(img_paths) >= min_seq_len:
                 if camid in video[pid] :
                     video[pid][camid].extend(img_paths)  
@@ -1046,6 +978,7 @@ import os.path as osp
 import numpy as np
 import json
 import glob
+
 def read_json(fpath):
     with open(fpath, 'r') as f:
         obj = json.load(f)
@@ -2052,8 +1985,9 @@ class VID_Trans(nn.Module):
         camera=camera_num,  drop_path_rate=0.1, drop_rate=0.0, attn_drop_rate=0.0,norm_layer=partial(nn.LayerNorm, eps=1e-6),  cam_lambda=3.0)
         
           
-        state_dict = torch.load(pretrainpath, map_location='cpu')
-        self.base.load_param(state_dict,load=True)
+        if pretrainpath is not None:
+            state_dict = torch.load(pretrainpath, map_location='cpu')
+            self.base.load_param(state_dict,load=True)
         
        
         #global stream
@@ -2236,6 +2170,116 @@ class VID_Trans(nn.Module):
         for i in param_dict:
             self.state_dict()[i].copy_(param_dict[i])
         print('Loading pretrained model for finetuning from {}'.format(model_path))
+```
+
+### 文件: `check_pretrained_model.py`
+
+```python
+"""
+检查预训练模型的内容和性能指标
+"""
+import torch
+import argparse
+
+def check_model(model_path):
+    print(f"正在检查模型: {model_path}")
+    print("="*80)
+    
+    checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+    
+    print(f"\n【Checkpoint类型】: {type(checkpoint)}")
+    
+    # 检查checkpoint的类型
+    if isinstance(checkpoint, dict):
+        print(f"\n【Checkpoint 结构】")
+        print(f"Keys: {list(checkpoint.keys())}")
+        print()
+        
+        # 检查是否包含性能指标
+        if 'rank1' in checkpoint or 'mAP' in checkpoint:
+            print("【性能指标】")
+            if 'rank1' in checkpoint:
+                print(f"  Rank-1: {checkpoint['rank1']:.4f}")
+            if 'mAP' in checkpoint:
+                print(f"  mAP: {checkpoint['mAP']:.4f}")
+            if 'epoch' in checkpoint:
+                print(f"  Epoch: {checkpoint['epoch']}")
+            print()
+        
+        # 检查模型参数
+        if 'model' in checkpoint:
+            state_dict = checkpoint['model']
+            print(f"【模型参数】(checkpoint['model'])")
+            print(f"  总参数数量: {len(state_dict)}")
+            print(f"\n  前10个参数键:")
+            for i, key in enumerate(list(state_dict.keys())[:10]):
+                print(f"    {key}: {state_dict[key].shape}")
+            print()
+        elif 'state_dict' in checkpoint:
+            state_dict = checkpoint['state_dict']
+            print(f"【模型参数】(checkpoint['state_dict'])")
+            print(f"  总参数数量: {len(state_dict)}")
+            print(f"\n  前10个参数键:")
+            for i, key in enumerate(list(state_dict.keys())[:10]):
+                print(f"    {key}: {state_dict[key].shape}")
+            print()
+        else:
+            # 可能直接是state_dict
+            print(f"【模型参数】(直接state_dict格式)")
+            print(f"  总参数数量: {len(checkpoint)}")
+            
+            # 计算总参数量
+            total_params = 0
+            tensor_count = 0
+            for key, value in checkpoint.items():
+                if isinstance(value, torch.Tensor):
+                    total_params += value.numel()
+                    tensor_count += 1
+            
+            print(f"  Tensor数量: {tensor_count}")
+            print(f"  总参数量: {total_params:,}")
+            
+            print(f"\n  前15个参数键:")
+            for i, key in enumerate(list(checkpoint.keys())[:15]):
+                if isinstance(checkpoint[key], torch.Tensor):
+                    print(f"    {key}: {checkpoint[key].shape}")
+            
+            # 分析模型结构
+            print(f"\n【模型结构分析】")
+            base_params = [k for k in checkpoint.keys() if 'base.' in k]
+            classifier_params = [k for k in checkpoint.keys() if 'classifier' in k]
+            bottleneck_params = [k for k in checkpoint.keys() if 'bottleneck' in k]
+            
+            print(f"  包含'base.'的参数: {len(base_params)}")
+            print(f"  包含'classifier'的参数: {len(classifier_params)}")
+            print(f"  包含'bottleneck'的参数: {len(bottleneck_params)}")
+            print()
+            
+        # 检查args
+        if 'args' in checkpoint:
+            print("【训练参数】")
+            args = checkpoint['args']
+            if isinstance(args, dict):
+                for k, v in args.items():
+                    print(f"  {k}: {v}")
+            else:
+                print(f"  {args}")
+            print()
+                
+    else:
+        print("⚠ Checkpoint不是字典格式")
+        print(f"类型: {type(checkpoint)}")
+    
+    print("="*80)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_path', type=str, 
+                       default='Mars_best_epoch59_rank1_0.9565_mAP_0.8859.pth',
+                       help='预训练模型路径')
+    args = parser.parse_args()
+    
+    check_model(args.model_path)
 ```
 
 ### 文件: `loss/center_loss.py`
@@ -2684,9 +2728,10 @@ def sample_center_clip(img_paths, seq_len: int, transform) -> torch.Tensor:
 
 
 @torch.no_grad()
-def extract_vidtrans_features(model: nn.Module, dataset, device: str) -> Tuple[torch.Tensor, np.ndarray, np.ndarray]:
-    """Replicates logic from VID_Test.test() to extract features per tracklet.
+def extract_vidtrans_features(model: nn.Module, dataset, device: str, verbose: bool = False) -> Tuple[torch.Tensor, np.ndarray, np.ndarray]:
+    """Replicates logic from VID_Test.test() to extract features per tracklet with dense sampling.
     dataset items: returns (imgs_array [B,S,C,H,W], pid, camids_list, img_paths)
+    where B is the number of clips from dense sampling (typically 10-50 clips per video)
     Returns:
       feats: torch.FloatTensor [num_tracks, D]
       pids: np.ndarray [num_tracks]
@@ -2694,16 +2739,27 @@ def extract_vidtrans_features(model: nn.Module, dataset, device: str) -> Tuple[t
     """
     model.eval()
     feats, pids_arr, camids_arr = [], [], []
-    for (imgs, pid, camids, _img_paths) in dataset:
-        # imgs: [B, S, C, H, W]
+    total_clips = 0
+    clip_counts = []
+    
+    for idx, (imgs, pid, camids, _img_paths) in enumerate(dataset):
+        # imgs: [B, S, C, H, W] where B = num_clips from dense sampling
         if isinstance(imgs, list):
             imgs = torch.stack(imgs, dim=0)
         imgs = imgs.to(device)
         b, s, c, h, w = imgs.size()
+        
+        # 调试信息：记录clips数量
+        clip_counts.append(b)
+        total_clips += b
+        
+        if verbose and idx < 3:
+            print(f"  [Sample {idx}] Video has {b} clips, each with {s} frames, shape: [{b},{s},{c},{h},{w}]")
+        
         # Use per-frame cam ids for feature extraction (matches flattened frames)
         feat = model(imgs, pid, cam_label=camids)  # [B, D]
-        feat = feat.view(b, -1)
-        feat = torch.mean(feat, dim=0)  # [D]
+        feat = feat.view(b, -1)  # [B, D]
+        feat = torch.mean(feat, dim=0)  # 对B个clips求平均 → [D]
         feats.append(feat.cpu())
         pids_arr.append(pid)
         # For evaluation, keep ONE camid per tracklet (all frames in a tracklet share the same cam)
@@ -2711,9 +2767,17 @@ def extract_vidtrans_features(model: nn.Module, dataset, device: str) -> Tuple[t
             camids_arr.append(int(camids[0]))
         else:
             camids_arr.append(int(camids))
+    
     feats = torch.stack(feats, dim=0)
     pids_np = np.asarray(pids_arr)
     camids_np = np.asarray(camids_arr)
+    
+    # 打印统计信息
+    if verbose:
+        avg_clips = total_clips / len(dataset) if len(dataset) > 0 else 0
+        print(f"  ✓ Total videos: {len(dataset)}, Total clips: {total_clips}, Avg clips/video: {avg_clips:.1f}")
+        print(f"  ✓ Clips range: min={min(clip_counts)}, max={max(clip_counts)}")
+    
     return feats, pids_np, camids_np
 
 
@@ -3091,23 +3155,62 @@ def main():
     train_loader, num_query, num_classes, camera_num, view_num, q_set, g_set = dataloader(args.Dataset_name)
 
     # Stage-1: Baseline feature extractor
-    vid_model = VID_Trans(num_classes=num_classes, camera_num=camera_num, pretrainpath=args.vid_pretrain).to(device)
+    # IMPORTANT: Set pretrainpath=None to avoid loading ImageNet weights that conflict with MARS checkpoint
+    vid_model = VID_Trans(num_classes=num_classes, camera_num=camera_num, pretrainpath=None).to(device)
     # Load baseline checkpoint (state_dict) if compatible; fall back to only ImageNet pretrain otherwise
+    print("\n" + "="*80)
+    print("STAGE 1: Loading Baseline VID-Trans-ReID Model")
+    print("="*80)
     try:
         print(f"Loading baseline checkpoint from: {args.baseline_ckpt}")
         base_state = safe_torch_load(args.baseline_ckpt, map_location="cpu")
-        if isinstance(base_state, dict) and "model" in base_state:
-            base_state = base_state["model"]
-        vid_model.load_state_dict(base_state, strict=False)
+        
+        # 显示checkpoint信息
+        if isinstance(base_state, dict):
+            print(f"\n[Checkpoint Info]")
+            if "epoch" in base_state:
+                print(f"  Epoch: {base_state['epoch']}")
+            if "rank1" in base_state:
+                print(f"  Original Rank-1: {base_state['rank1']:.4f} ({base_state['rank1']*100:.2f}%)")
+            if "mAP" in base_state:
+                print(f"  Original mAP: {base_state['mAP']:.4f} ({base_state['mAP']*100:.2f}%)")
+            if "timestamp" in base_state:
+                print(f"  Timestamp: {base_state['timestamp']}")
+        
+        # Handle different checkpoint formats: 'model', 'state_dict', or direct dict
+        if isinstance(base_state, dict):
+            if "model" in base_state:
+                base_state = base_state["model"]
+            elif "state_dict" in base_state:
+                base_state = base_state["state_dict"]
+        
+        print(f"\n[Loading Parameters]")
+        missing_keys, unexpected_keys = vid_model.load_state_dict(base_state, strict=False)
+        print(f"  ✓ Loaded {len(base_state)} parameters from baseline checkpoint")
+        if missing_keys:
+            print(f"  ⚠️  Missing {len(missing_keys)} keys (will use random init): {missing_keys[:3]}{'...' if len(missing_keys) > 3 else ''}")
+        if unexpected_keys:
+            print(f"  ⚠️  Unexpected {len(unexpected_keys)} keys (ignored): {unexpected_keys[:3]}{'...' if len(unexpected_keys) > 3 else ''}")
+        
+        if not missing_keys and not unexpected_keys:
+            print(f"  ✓✓ Perfect match! All parameters loaded successfully.")
+        
     except Exception as exc:
         print(f"[WARN] Could not load baseline checkpoint into VID_Trans: {exc}. Proceeding with backbone pretrain only.")
     vid_model.eval()
 
-    # Extract features
-    print("Extracting baseline features (query)...")
-    qf, q_pids, q_camids = extract_vidtrans_features(vid_model, q_set, device)
-    print("Extracting baseline features (gallery)...")
-    gf, g_pids, g_camids = extract_vidtrans_features(vid_model, g_set, device)
+    # Extract features with verbose mode to verify dense sampling
+    print("\n" + "="*80)
+    print("Extracting baseline features (query) with DENSE sampling...")
+    print("="*80)
+    qf, q_pids, q_camids = extract_vidtrans_features(vid_model, q_set, device, verbose=True)
+    print(f"✓ Query features extracted: {qf.shape}")
+    
+    print("\n" + "="*80)
+    print("Extracting baseline features (gallery) with DENSE sampling...")
+    print("="*80)
+    gf, g_pids, g_camids = extract_vidtrans_features(vid_model, g_set, device, verbose=True)
+    print(f"✓ Gallery features extracted: {gf.shape}")
 
     # Compute baseline distance matrix and metrics
     print("Computing baseline distances and metrics...")
@@ -3118,8 +3221,23 @@ def main():
     print(f"Rank-1: {cmc_base[0]:.1%}")
 
     # Stage-2: Hierarchical re-ranker
+    print("\n" + "="*80)
+    print("STAGE 2: Loading Hierarchical Cross-Attention Re-ranker")
+    print("="*80)
     print(f"Loading re-ranker checkpoint from: {args.hierarchical_ckpt}")
     hier_obj = safe_torch_load(args.hierarchical_ckpt, map_location="cpu")
+    
+    # 显示checkpoint信息
+    if isinstance(hier_obj, dict):
+        print(f"\n[Checkpoint Info]")
+        if "epoch" in hier_obj:
+            print(f"  Epoch: {hier_obj['epoch']}")
+        if "val_auc" in hier_obj or "best_auc" in hier_obj:
+            auc = hier_obj.get('val_auc', hier_obj.get('best_auc', 0))
+            print(f"  Validation AUC: {auc:.4f}")
+        if "val_acc" in hier_obj:
+            print(f"  Validation Acc: {hier_obj['val_acc']:.4f}")
+    
     # Resolve to plain state_dict (support {'model': ...} or {'state_dict': ...})
     if isinstance(hier_obj, dict) and "model" in hier_obj:
         state = hier_obj["model"]
@@ -3155,13 +3273,34 @@ def main():
             return filtered2, stripped
         return filtered, st
 
+    print(f"\n[Loading Parameters]")
     filtered_state, used_source = _filter_and_strip_prefix(state)
     dropped = [k for k in used_source.keys() if k not in filtered_state]
+    print(f"  ✓ Loaded {len(filtered_state)} parameters from re-ranker checkpoint")
     if dropped:
         # Show only a few dropped keys for brevity (likely includes 'backbone.Cam')
-        print(f"[INFO] Skipped {len(dropped)} keys due to mismatch, e.g., {dropped[:3]}")
-    rerank_model.load_state_dict(filtered_state, strict=False)
+        print(f"  ⚠️  Skipped {len(dropped)} keys due to mismatch, e.g., {dropped[:3]}")
+    
+    missing, unexpected = rerank_model.load_state_dict(filtered_state, strict=False)
+    if missing:
+        print(f"  ⚠️  Missing {len(missing)} keys in re-ranker model")
+    if not missing and not dropped:
+        print(f"  ✓✓ Re-ranker loaded successfully!")
+    
     rerank_model.eval()
+    
+    # 验证baseline和rerank模型的backbone一致性
+    print(f"\n[Backbone Consistency Check]")
+    print("  Comparing backbone parameters between baseline and re-ranker...")
+    baseline_backbone_keys = [k for k in base_state.keys() if 'base.' in k]
+    rerank_backbone_keys = [k for k in filtered_state.keys() if 'backbone.' in k]
+    print(f"  Baseline backbone params: {len(baseline_backbone_keys)}")
+    print(f"  Re-ranker backbone params: {len(rerank_backbone_keys)}")
+    
+    if len(baseline_backbone_keys) > 0 and len(rerank_backbone_keys) > 0:
+        print(f"  ✓ Both models have backbone parameters loaded")
+    else:
+        print(f"  ⚠️  Warning: One model may not have backbone loaded correctly")
 
     # Re-rank top-K per query
     print(f"Re-ranking top-{args.topk} per query...")

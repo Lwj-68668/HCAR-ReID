@@ -68,8 +68,9 @@ class VID_Trans(nn.Module):
         camera=camera_num,  drop_path_rate=0.1, drop_rate=0.0, attn_drop_rate=0.0,norm_layer=partial(nn.LayerNorm, eps=1e-6),  cam_lambda=3.0)
         
           
-        state_dict = torch.load(pretrainpath, map_location='cpu')
-        self.base.load_param(state_dict,load=True)
+        if pretrainpath is not None:
+            state_dict = torch.load(pretrainpath, map_location='cpu')
+            self.base.load_param(state_dict,load=True)
         
        
         #global stream

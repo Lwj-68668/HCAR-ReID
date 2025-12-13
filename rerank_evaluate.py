@@ -100,9 +100,10 @@ def sample_center_clip(img_paths, seq_len: int, transform) -> torch.Tensor:
 
 
 @torch.no_grad()
-def extract_vidtrans_features(model: nn.Module, dataset, device: str) -> Tuple[torch.Tensor, np.ndarray, np.ndarray]:
-    """Replicates logic from VID_Test.test() to extract features per tracklet.
+def extract_vidtrans_features(model: nn.Module, dataset, device: str, verbose: bool = False) -> Tuple[torch.Tensor, np.ndarray, np.ndarray]:
+    """Replicates logic from VID_Test.test() to extract features per tracklet with dense sampling.
     dataset items: returns (imgs_array [B,S,C,H,W], pid, camids_list, img_paths)
+    where B is the number of clips from dense sampling (typically 10-50 clips per video)
     Returns:
       feats: torch.FloatTensor [num_tracks, D]
       pids: np.ndarray [num_tracks]
@@ -110,16 +111,27 @@ def extract_vidtrans_features(model: nn.Module, dataset, device: str) -> Tuple[t
     """
     model.eval()
     feats, pids_arr, camids_arr = [], [], []
-    for (imgs, pid, camids, _img_paths) in dataset:
-        # imgs: [B, S, C, H, W]
+    total_clips = 0
+    clip_counts = []
+    
+    for idx, (imgs, pid, camids, _img_paths) in enumerate(dataset):
+        # imgs: [B, S, C, H, W] where B = num_clips from dense sampling
         if isinstance(imgs, list):
             imgs = torch.stack(imgs, dim=0)
         imgs = imgs.to(device)
         b, s, c, h, w = imgs.size()
+        
+        # 调试信息：记录clips数量
+        clip_counts.append(b)
+        total_clips += b
+        
+        if verbose and idx < 3:
+            print(f"  [Sample {idx}] Video has {b} clips, each with {s} frames, shape: [{b},{s},{c},{h},{w}]")
+        
         # Use per-frame cam ids for feature extraction (matches flattened frames)
         feat = model(imgs, pid, cam_label=camids)  # [B, D]
-        feat = feat.view(b, -1)
-        feat = torch.mean(feat, dim=0)  # [D]
+        feat = feat.view(b, -1)  # [B, D]
+        feat = torch.mean(feat, dim=0)  # 对B个clips求平均 → [D]
         feats.append(feat.cpu())
         pids_arr.append(pid)
         # For evaluation, keep ONE camid per tracklet (all frames in a tracklet share the same cam)
@@ -127,9 +139,17 @@ def extract_vidtrans_features(model: nn.Module, dataset, device: str) -> Tuple[t
             camids_arr.append(int(camids[0]))
         else:
             camids_arr.append(int(camids))
+    
     feats = torch.stack(feats, dim=0)
     pids_np = np.asarray(pids_arr)
     camids_np = np.asarray(camids_arr)
+    
+    # 打印统计信息
+    if verbose:
+        avg_clips = total_clips / len(dataset) if len(dataset) > 0 else 0
+        print(f"  ✓ Total videos: {len(dataset)}, Total clips: {total_clips}, Avg clips/video: {avg_clips:.1f}")
+        print(f"  ✓ Clips range: min={min(clip_counts)}, max={max(clip_counts)}")
+    
     return feats, pids_np, camids_np
 
 
@@ -507,23 +527,65 @@ def main():
     train_loader, num_query, num_classes, camera_num, view_num, q_set, g_set = dataloader(args.Dataset_name)
 
     # Stage-1: Baseline feature extractor
-    vid_model = VID_Trans(num_classes=num_classes, camera_num=camera_num, pretrainpath=args.vid_pretrain).to(device)
+    # IMPORTANT: Set pretrainpath=None to avoid loading ImageNet weights that conflict with MARS checkpoint
+    vid_model = VID_Trans(num_classes=num_classes, camera_num=camera_num, pretrainpath=None).to(device)
     # Load baseline checkpoint (state_dict) if compatible; fall back to only ImageNet pretrain otherwise
+    print("\n" + "="*80)
+    print("STAGE 1: Loading Baseline VID-Trans-ReID Model")
+    print("="*80)
     try:
         print(f"Loading baseline checkpoint from: {args.baseline_ckpt}")
         base_state = safe_torch_load(args.baseline_ckpt, map_location="cpu")
-        if isinstance(base_state, dict) and "model" in base_state:
-            base_state = base_state["model"]
-        vid_model.load_state_dict(base_state, strict=False)
+        
+        # 显示checkpoint信息
+        if isinstance(base_state, dict):
+            print(f"\n[Checkpoint Info]")
+            if "epoch" in base_state:
+                print(f"  Epoch: {base_state['epoch']}")
+            if "rank1" in base_state:
+                print(f"  Original Rank-1: {base_state['rank1']:.4f} ({base_state['rank1']*100:.2f}%)")
+            if "mAP" in base_state:
+                print(f"  Original mAP: {base_state['mAP']:.4f} ({base_state['mAP']*100:.2f}%)")
+            if "timestamp" in base_state:
+                print(f"  Timestamp: {base_state['timestamp']}")
+        
+        # Handle different checkpoint formats: 'model', 'state_dict', or direct dict
+        if isinstance(base_state, dict):
+            if "model" in base_state:
+                base_state = base_state["model"]
+            elif "state_dict" in base_state:
+                base_state = base_state["state_dict"]
+
+        if isinstance(base_state, dict):
+            base_state = {(k[7:] if k.startswith("module.") else k): v for k, v in base_state.items()}
+        
+        print(f"\n[Loading Parameters]")
+        missing_keys, unexpected_keys = vid_model.load_state_dict(base_state, strict=False)
+        print(f"  ✓ Loaded {len(base_state)} parameters from baseline checkpoint")
+        if missing_keys:
+            print(f"  ⚠️  Missing {len(missing_keys)} keys (will use random init): {missing_keys[:3]}{'...' if len(missing_keys) > 3 else ''}")
+        if unexpected_keys:
+            print(f"  ⚠️  Unexpected {len(unexpected_keys)} keys (ignored): {unexpected_keys[:3]}{'...' if len(unexpected_keys) > 3 else ''}")
+        
+        if not missing_keys and not unexpected_keys:
+            print(f"  ✓✓ Perfect match! All parameters loaded successfully.")
+        
     except Exception as exc:
         print(f"[WARN] Could not load baseline checkpoint into VID_Trans: {exc}. Proceeding with backbone pretrain only.")
     vid_model.eval()
 
-    # Extract features
-    print("Extracting baseline features (query)...")
-    qf, q_pids, q_camids = extract_vidtrans_features(vid_model, q_set, device)
-    print("Extracting baseline features (gallery)...")
-    gf, g_pids, g_camids = extract_vidtrans_features(vid_model, g_set, device)
+    # Extract features with verbose mode to verify dense sampling
+    print("\n" + "="*80)
+    print("Extracting baseline features (query) with DENSE sampling...")
+    print("="*80)
+    qf, q_pids, q_camids = extract_vidtrans_features(vid_model, q_set, device, verbose=True)
+    print(f"✓ Query features extracted: {qf.shape}")
+    
+    print("\n" + "="*80)
+    print("Extracting baseline features (gallery) with DENSE sampling...")
+    print("="*80)
+    gf, g_pids, g_camids = extract_vidtrans_features(vid_model, g_set, device, verbose=True)
+    print(f"✓ Gallery features extracted: {gf.shape}")
 
     # Compute baseline distance matrix and metrics
     print("Computing baseline distances and metrics...")
@@ -534,50 +596,78 @@ def main():
     print(f"Rank-1: {cmc_base[0]:.1%}")
 
     # Stage-2: Hierarchical re-ranker
+    print("\n" + "="*80)
+    print("STAGE 2: Loading Hierarchical Cross-Attention Re-ranker")
+    print("="*80)
     print(f"Loading re-ranker checkpoint from: {args.hierarchical_ckpt}")
     hier_obj = safe_torch_load(args.hierarchical_ckpt, map_location="cpu")
+    
+    # 显示checkpoint信息
+    if isinstance(hier_obj, dict):
+        print(f"\n[Checkpoint Info]")
+        if "epoch" in hier_obj:
+            print(f"  Epoch: {hier_obj['epoch']}")
+        if "val_auc" in hier_obj or "best_auc" in hier_obj:
+            auc = hier_obj.get('val_auc', hier_obj.get('best_auc', 0))
+            print(f"  Validation AUC: {auc:.4f}")
+        if "val_acc" in hier_obj:
+            print(f"  Validation Acc: {hier_obj['val_acc']:.4f}")
+    
     # Resolve to plain state_dict (support {'model': ...} or {'state_dict': ...})
     if isinstance(hier_obj, dict) and "model" in hier_obj:
-        state = hier_obj["model"]
+        hier_state = hier_obj["model"]
     elif isinstance(hier_obj, dict) and "state_dict" in hier_obj:
-        state = hier_obj["state_dict"]
+        hier_state = hier_obj["state_dict"]
     else:
-        state = hier_obj
+        hier_state = hier_obj
 
     # Infer camera_num from checkpoint if possible
-    ckpt_cam_num = infer_camera_num_from_state_dict(state)
+    ckpt_cam_num = infer_camera_num_from_state_dict(hier_state)
     use_cam_num = ckpt_cam_num if ckpt_cam_num is not None else camera_num
     print(f"[INFO] Dataset camera_num={camera_num}; Checkpoint camera_num={ckpt_cam_num}; Using camera_num={use_cam_num}")
 
     print("Initializing Hierarchical Cross-Attention re-ranker...")
+    # 注意：pretrained_path=None，我们将从 hierarchical checkpoint 加载全部权重
     rerank_model = HierarchicalCrossAttentionReID(
         img_size=(256, 128),
         embed_dim=768,
         num_heads=12,
         stride_size=16,
         camera_num=use_cam_num,
-        pretrained_path=args.vid_pretrain,
+        pretrained_path=None,  # 不加载ImageNet预训练，改为从hierarchical checkpoint加载
     ).to(device)
 
     model_state = rerank_model.state_dict()
 
-    def _filter_and_strip_prefix(st):
-        # 1) try direct key match with same shapes
-        filtered = {k: v for k, v in st.items() if k in model_state and getattr(v, 'shape', None) == model_state[k].shape}
-        if len(filtered) == 0:
-            # 2) try removing 'module.' prefix (from DataParallel)
-            stripped = { (k[7:] if k.startswith('module.') else k): v for k, v in st.items() }
-            filtered2 = {k: v for k, v in stripped.items() if k in model_state and getattr(v, 'shape', None) == model_state[k].shape}
-            return filtered2, stripped
-        return filtered, st
+    if isinstance(hier_state, dict):
+        hier_state = {(k[7:] if k.startswith('module.') else k): v for k, v in hier_state.items()}
 
-    filtered_state, used_source = _filter_and_strip_prefix(state)
-    dropped = [k for k in used_source.keys() if k not in filtered_state]
-    if dropped:
-        # Show only a few dropped keys for brevity (likely includes 'backbone.Cam')
-        print(f"[INFO] Skipped {len(dropped)} keys due to mismatch, e.g., {dropped[:3]}")
-    rerank_model.load_state_dict(filtered_state, strict=False)
+    print(f"\n[Loading Parameters]")
+    loaded_state = None
+    try:
+        missing, unexpected = rerank_model.load_state_dict(hier_state, strict=True)
+        loaded_state = hier_state
+    except RuntimeError as exc:
+        print(f"  [WARN] Strict load failed: {exc}")
+        compatible_state = {
+            k: v
+            for k, v in hier_state.items()
+            if k in model_state and getattr(v, 'shape', None) == model_state[k].shape
+        }
+        missing, unexpected = rerank_model.load_state_dict(compatible_state, strict=False)
+        loaded_state = compatible_state
+        print(f"  [WARN] Loaded shape-compatible subset only.")
+
+    print(f"  ✓ Loaded {len(loaded_state)} parameters from hierarchical checkpoint")
+    if missing:
+        print(f"  ⚠️  Missing {len(missing)} keys (will use random init): {missing[:3]}{'...' if len(missing) > 3 else ''}")
+    if unexpected:
+        print(f"  ⚠️  Unexpected {len(unexpected)} keys (ignored): {unexpected[:3]}{'...' if len(unexpected) > 3 else ''}")
+    if not missing and not unexpected:
+        print(f"  ✓✓ Perfect match! All parameters loaded successfully.")
+
     rerank_model.eval()
+    print(f"  ✓ Re-ranker model ready!")
 
     # Re-rank top-K per query
     print(f"Re-ranking top-{args.topk} per query...")
