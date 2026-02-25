@@ -1,4 +1,10 @@
+[![DOI](https://img.shields.io/badge/DOI-10.6084/m9.figshare.31410519-blue)](https://doi.org/10.6084/m9.figshare.31410519)
+
 # Robust Video Person Re-Identification via Hierarchical Cross-Attention Mechanisms
+
+WARNING: This repository is directly associated with the manuscript submitted to *The Visual Computer*.
+
+If you use this code, please cite the corresponding manuscript.
 
 Official implementation for the manuscript currently submitted to *The Visual Computer*.
 
