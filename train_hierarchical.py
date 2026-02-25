@@ -39,6 +39,8 @@ def parse_args():
     parser.add_argument("--pretrained_path", type=str, default="jx_vit_base_p16_224-80ecf9dd.pth")
     parser.add_argument("--save_dir", type=str, default="checkpoints_hierarchical")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--camera_num", type=int, default=None,
+                        help="Number of cameras. If None, inferred from dataset (Mars=6, iLIDSVID=2, PRID=2)")
     
     # BCR-Focal参数
     parser.add_argument("--use_focal", action="store_true",
@@ -90,11 +92,12 @@ def train_one_epoch(model, loader, criterion, optimizer, device, epoch: int,
         else:
             logits = model(v1, v2, return_rev_logit=False)
         
-        # 主损失：BCE或Focal
+        # 主损失：BCE或Focal (squeeze logits to match labels shape)
+        logits_flat = logits.squeeze(-1)  # [B, 1] -> [B]
         if use_focal and focal_criterion is not None:
-            base_loss = focal_criterion(logits, labels.float())
+            base_loss = focal_criterion(logits_flat, labels.float())
         else:
-            base_loss = criterion(logits, labels.float())
+            base_loss = criterion(logits_flat, labels.float())
         
         # 双向一致性损失
         if symkl_w > 0:
@@ -113,7 +116,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device, epoch: int,
             running_symkl_loss += loss_sym.item() * labels.size(0)
         total += labels.size(0)
 
-        probs = torch.sigmoid(logits.detach())
+        probs = torch.sigmoid(logits.detach().squeeze(-1))  # [B, 1] -> [B]
         preds = (probs >= 0.5).float()
         correct += (preds == labels).sum().item()
 
@@ -139,7 +142,10 @@ def train_one_epoch(model, loader, criterion, optimizer, device, epoch: int,
     if SKLEARN_AVAILABLE:
         try:
             auc = metrics.roc_auc_score(y_true, y_score)
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG] AUC calculation failed: {e}")
+            print(f"[DEBUG] y_true shape: {y_true.shape}, unique: {np.unique(y_true)}")
+            print(f"[DEBUG] y_score shape: {y_score.shape}, range: [{y_score.min():.4f}, {y_score.max():.4f}]")
             auc = 0.0
     else:
         auc = 0.0
@@ -164,16 +170,17 @@ def evaluate(model, loader, criterion, device, epoch: int, use_tqdm: bool = True
 
         logits = model(v1, v2)
         
-        # 使用focal或BCE损失
+        # 使用focal或BCE损失 (squeeze logits to match labels shape)
+        logits_flat = logits.squeeze(-1)  # [B, 1] -> [B]
         if use_focal and focal_criterion is not None:
-            loss = focal_criterion(logits, labels.float())
+            loss = focal_criterion(logits_flat, labels.float())
         else:
-            loss = criterion(logits, labels.float())
+            loss = criterion(logits_flat, labels.float())
 
         running_loss += loss.item() * labels.size(0)
         total += labels.size(0)
 
-        probs = torch.sigmoid(logits)
+        probs = torch.sigmoid(logits.squeeze(-1))  # [B, 1] -> [B]
         preds = (probs >= 0.5).float()
         correct += (preds == labels).sum().item()
 
@@ -191,7 +198,10 @@ def evaluate(model, loader, criterion, device, epoch: int, use_tqdm: bool = True
     if SKLEARN_AVAILABLE:
         try:
             auc = metrics.roc_auc_score(y_true, y_score)
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG] AUC calculation failed: {e}")
+            print(f"[DEBUG] y_true shape: {y_true.shape}, unique: {np.unique(y_true)}")
+            print(f"[DEBUG] y_score shape: {y_score.shape}, range: [{y_score.min():.4f}, {y_score.max():.4f}]")
             auc = 0.0
     else:
         auc = 0.0
@@ -206,12 +216,21 @@ def main():
     # Fix random seeds for reproducibility
     set_seed(args.seed)
 
+    # Infer camera_num from dataset if not specified
+    dataset_camera_num = {"Mars": 6, "iLIDSVID": 2, "PRID": 2}
+    if args.camera_num is None:
+        camera_num = dataset_camera_num.get(args.Dataset_name, 6)
+        print(f"[INFO] Using camera_num={camera_num} for dataset {args.Dataset_name}")
+    else:
+        camera_num = args.camera_num
+        print(f"[INFO] Using specified camera_num={camera_num}")
+
     model = HierarchicalCrossAttentionReID(
         img_size=(args.img_height, args.img_width),
         embed_dim=768,
         num_heads=12,
         stride_size=16,
-        camera_num=6,
+        camera_num=camera_num,
         pretrained_path=args.pretrained_path,
     ).to(device)
 

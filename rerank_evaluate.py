@@ -100,14 +100,19 @@ def sample_center_clip(img_paths, seq_len: int, transform) -> torch.Tensor:
 
 
 @torch.no_grad()
-def extract_vidtrans_features(model: nn.Module, dataset, device: str, verbose: bool = False) -> Tuple[torch.Tensor, np.ndarray, np.ndarray]:
+def extract_vidtrans_features(model: nn.Module, dataset, device: str, verbose: bool = False, legacy_camid: bool = False) -> Tuple[torch.Tensor, np.ndarray, np.ndarray]:
     """Replicates logic from VID_Test.test() to extract features per tracklet with dense sampling.
     dataset items: returns (imgs_array [B,S,C,H,W], pid, camids_list, img_paths)
     where B is the number of clips from dense sampling (typically 10-50 clips per video)
+    
+    Args:
+        legacy_camid: If True, use original VID_Test.py camid collection (extend all frame camids).
+                      This replicates the original evaluation behavior to match checkpoint metrics.
+                      If False, use correct one-camid-per-tracklet (recommended for accurate evaluation).
     Returns:
       feats: torch.FloatTensor [num_tracks, D]
       pids: np.ndarray [num_tracks]
-      camids: np.ndarray [num_tracks] (one camera id per tracklet for evaluation)
+      camids: np.ndarray - shape depends on legacy_camid flag
     """
     model.eval()
     feats, pids_arr, camids_arr = [], [], []
@@ -134,11 +139,21 @@ def extract_vidtrans_features(model: nn.Module, dataset, device: str, verbose: b
         feat = torch.mean(feat, dim=0)  # 对B个clips求平均 → [D]
         feats.append(feat.cpu())
         pids_arr.append(pid)
-        # For evaluation, keep ONE camid per tracklet (all frames in a tracklet share the same cam)
-        if isinstance(camids, (list, tuple, np.ndarray)) and len(camids) > 0:
-            camids_arr.append(int(camids[0]))
+        
+        # Camid collection: legacy vs correct
+        if legacy_camid:
+            # Original VID_Test.py behavior: extend all frame camids
+            # This creates length mismatch with pids but replicates original evaluation
+            if isinstance(camids, (list, tuple, np.ndarray)):
+                camids_arr.extend([int(c) for c in camids])
+            else:
+                camids_arr.append(int(camids))
         else:
-            camids_arr.append(int(camids))
+            # Correct behavior: one camid per tracklet
+            if isinstance(camids, (list, tuple, np.ndarray)) and len(camids) > 0:
+                camids_arr.append(int(camids[0]))
+            else:
+                camids_arr.append(int(camids))
     
     feats = torch.stack(feats, dim=0)
     pids_np = np.asarray(pids_arr)
@@ -149,6 +164,10 @@ def extract_vidtrans_features(model: nn.Module, dataset, device: str, verbose: b
         avg_clips = total_clips / len(dataset) if len(dataset) > 0 else 0
         print(f"  ✓ Total videos: {len(dataset)}, Total clips: {total_clips}, Avg clips/video: {avg_clips:.1f}")
         print(f"  ✓ Clips range: min={min(clip_counts)}, max={max(clip_counts)}")
+        if legacy_camid:
+            print(f"  ⚠️  Legacy camid mode: camids array has {len(camids_np)} elements (vs {len(pids_np)} pids)")
+        else:
+            print(f"  ✓ Correct camid mode: camids array has {len(camids_np)} elements (matching {len(pids_np)} pids)")
     
     return feats, pids_np, camids_np
 
@@ -165,6 +184,8 @@ def safe_torch_load(path: str, map_location="cpu"):
     """Load checkpoints safely across torch versions.
     Tries weights_only=False first (PyTorch>=2.6), falls back if unsupported.
     """
+    if isinstance(path, str) and os.sep == "/" and "\\" in path:
+        path = path.replace("\\", "/")
     try:
         return torch.load(path, map_location=map_location, weights_only=False)
     except TypeError:
@@ -239,6 +260,9 @@ def rerank_with_hierarchical(
     stats_top1_changed = 0
     stats_corr_list = []
 
+    # Debug: collect all probs for analysis
+    all_probs_debug = []
+    
     for qi in range(num_q):
         # top-K selection
         order = np.argsort(distmat[qi])
@@ -291,6 +315,8 @@ def rerank_with_hierarchical(
                 p = p1
             probs_all[start:end] = p.detach().cpu().numpy()
             start = end
+        
+        all_probs_debug.extend(probs_all.tolist())
 
         # optional normalization of hierarchical scores across top-K
         probs_use = probs_all.copy()
@@ -467,6 +493,11 @@ def rerank_with_hierarchical(
         print("[STATS] mean |Δ| in normalized distance across all top-K pairs: {:.6f}".format(mean_delta_norm))
         print("[STATS] queries with top-1 (within top-K) changed: {} / {}".format(stats_top1_changed, num_q))
         print("[STATS] mean corr(prob, baseline_similarity) over queries: {:.4f}".format(mean_corr))
+        # Debug: probability distribution analysis
+        if all_probs_debug:
+            probs_arr = np.array(all_probs_debug)
+            print("[DEBUG] Prob distribution: min={:.4f}, max={:.4f}, mean={:.4f}, std={:.4f}".format(
+                probs_arr.min(), probs_arr.max(), probs_arr.mean(), probs_arr.std()))
 
     return dist_rerank
 
@@ -516,6 +547,10 @@ def parse_args():
                         help="Exponent for scaling lambda by baseline uncertainty: ((thr-gap)/thr)^power.")
     parser.add_argument("--keep_top1_if_confident", action="store_true",
                         help="Only keep baseline top-1 when baseline is confident (gap >= base_gap_thr). Allows improving Rank-1 on uncertain queries.")
+    parser.add_argument("--legacy_eval", action="store_true",
+                        help="Use original VID_Test.py camid collection (extend all frame camids). "
+                             "This replicates the original evaluation behavior to match checkpoint metrics. "
+                             "Without this flag, uses correct one-camid-per-tracklet for accurate evaluation.")
     return parser.parse_args()
 
 
@@ -577,14 +612,18 @@ def main():
     # Extract features with verbose mode to verify dense sampling
     print("\n" + "="*80)
     print("Extracting baseline features (query) with DENSE sampling...")
+    if args.legacy_eval:
+        print("[MODE] Legacy evaluation: using original VID_Test.py camid collection")
+    else:
+        print("[MODE] Correct evaluation: using one camid per tracklet")
     print("="*80)
-    qf, q_pids, q_camids = extract_vidtrans_features(vid_model, q_set, device, verbose=True)
+    qf, q_pids, q_camids = extract_vidtrans_features(vid_model, q_set, device, verbose=True, legacy_camid=args.legacy_eval)
     print(f"✓ Query features extracted: {qf.shape}")
     
     print("\n" + "="*80)
     print("Extracting baseline features (gallery) with DENSE sampling...")
     print("="*80)
-    gf, g_pids, g_camids = extract_vidtrans_features(vid_model, g_set, device, verbose=True)
+    gf, g_pids, g_camids = extract_vidtrans_features(vid_model, g_set, device, verbose=True, legacy_camid=args.legacy_eval)
     print(f"✓ Gallery features extracted: {gf.shape}")
 
     # Compute baseline distance matrix and metrics

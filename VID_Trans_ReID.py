@@ -160,6 +160,7 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True    
     train_loader,  num_query, num_classes, camera_num, view_num,q_val_set,g_val_set = dataloader(Dataset_name)
+    pretrainpath = "jx_vit_base_p16_224-80ecf9dd.pth"
     model = VID_Trans( num_classes=num_classes, camera_num=camera_num,pretrainpath=pretrainpath)
     
     loss_fun,center_criterion= make_loss( num_classes=num_classes)
@@ -237,6 +238,6 @@ if __name__ == '__main__':
                print('CMC: %.4f, mAP : %.4f'%(cmc,map))
                if cmc_rank1 < cmc:
                   cmc_rank1=cmc
-                  torch.save(model.state_dict(),os.path.join('/VID-Trans-ReID',  Dataset_name+'Main_Model.pth')) 
+                  torch.save(model.state_dict(), Dataset_name + '_best.pth') 
         
      

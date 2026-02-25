@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite the manuscript and the software archive."
+title: "Robust Video Person Re-Identification via Hierarchical Cross-Attention Mechanisms (Code)"
+type: software
+version: "1.0.0"
+authors:
+  - family-names: "<FAMILY_NAME_1>"
+    given-names: "<GIVEN_NAME_1>"
+repository-code: "<GITHUB_REPOSITORY_URL>"
+url: "<GITHUB_REPOSITORY_URL>"
+abstract: "Official implementation of the manuscript submitted to The Visual Computer."
+keywords:
+  - video person re-identification
+  - hierarchical cross-attention
+  - transformer
+  - re-ranking
+identifiers:
+  - type: doi
+    value: "<CODE_DOI>"
+preferred-citation:
+  type: article
+  title: "Robust Video Person Re-Identification via Hierarchical Cross-Attention Mechanisms"
+  authors:
+    - family-names: "<FAMILY_NAME_1>"
+      given-names: "<GIVEN_NAME_1>"
+  journal: "The Visual Computer"
+  status: "submitted"
+  year: 2026
+  doi: "<MANUSCRIPT_DOI_IF_AVAILABLE>"

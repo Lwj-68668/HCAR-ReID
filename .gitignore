@@ -1,33 +1,39 @@
-﻿# 创建 .gitignore 文件
-@"
-# Python
+# Python cache
 __pycache__/
 *.py[cod]
-*.class
-*.so
-*.egg-info/
-dist/
-build/
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
 
 # IDE
 .idea/
 .vscode/
-*.swp
-*.swo
 
-# 大文件（模型权重）
-*.pth
-*.pt
-*.pkl
-*.h5
-
-# 数据集
-Data/
-Datasets/
-
-# 检查点
-checkpoints_*/
-
-# 系统文件
+# OS files
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+
+# Data and large artifacts
+Data/
+checkpoints_baseline/
+checkpoints_hierarchical/
+checkpoints_*/
+runs/
+wandb/
+*.pth
+*.pt
+*.ckpt
+*.npy
+*.npz
+
+# Build/package
+dist/
+build/
+*.egg-info/

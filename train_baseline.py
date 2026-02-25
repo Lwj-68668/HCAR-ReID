@@ -1,6 +1,8 @@
 import argparse
 import os
 import time
+import random
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -35,7 +37,20 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--pretrained_path", type=str, default="jx_vit_base_p16_224-80ecf9dd.pth")
     parser.add_argument("--save_dir", type=str, default="checkpoints_baseline")
+    parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
+
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def train_one_epoch(model, loader, criterion, optimizer, device, epoch: int, use_tqdm: bool = True):
@@ -141,6 +156,7 @@ def main():
     args = parse_args()
     os.makedirs(args.save_dir, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    set_seed(args.seed)
 
     model = CrossAttentionReID(
         img_size=(args.img_height, args.img_width),
@@ -156,6 +172,7 @@ def main():
         seq_len=args.seq_len,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        seed=args.seed,
     )
 
     criterion = nn.BCEWithLogitsLoss()
@@ -191,5 +208,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
