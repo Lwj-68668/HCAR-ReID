@@ -18,9 +18,8 @@ If you use this code, derived implementations, or released artifacts, please cit
 
 ## Persistent Resource Links (Fill Before Final Submission)
 
-- GitHub repository: `<GITHUB_REPOSITORY_URL>`
-- Code archive DOI (Zenodo): `<CODE_DOI_URL>`
-- Data DOI or data statement link: `<DATA_DOI_OR_DATA_STATEMENT_URL>`
+- GitHub repository: `https://github.com/Lwj-68668/HCAR-ReID`
+- Code archive DOI (Zenodo): `https://doi.org/10.6084/m9.figshare.31410519`
 
 Note: This project uses standard public ReID benchmarks. If dataset redistribution is restricted, publish dataset access instructions and your processed split metadata with a DOI instead of rehosting raw images.
 
